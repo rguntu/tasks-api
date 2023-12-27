@@ -1,80 +1,146 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Dummy data for tasks
-let tasks = [
-  { id: 1, text: 'RTask 1' },
-  { id: 2, text: 'RTask 2' },
-  { id: 3, text: 'RTask 3' },
-];
+// MongoDB connection
+mongoose.connect('mongodb://localhost:27017', { useNewUrlParser: true, useUnifiedTopology: true });
+const db = mongoose.connection;
 
-let savedTasks = [
-];
-
-// Routes
-
-// Get all tasks
-app.get('/tasks', (req, res) => {
-  res.json(tasks);
+db.on('error', console.error.bind(console, 'MongoDB connection error:'));
+db.once('open', () => {
+  console.log('Connected to MongoDB');
 });
 
-// Get all tasks
-app.get('/saved-tasks', (req, res) => {
-    res.json(savedTasks);
+// Define a simple model
+const Todo = mongoose.model('Todo', {
+  text: String,
+  completed: Boolean,
 });
 
-// Get a specific task by ID
-app.get('/tasks/:id', (req, res) => {
+const SavedTodo = mongoose.model('SavedTodo', {
+  text: String,
+  completed: Boolean,
+});
+
+
+
+// Define routes
+app.get('/tasks', async (req, res) => {
+  try {
+    const todos = await Todo.find();
+    //console.log("get response",todos)
+    res.json( todos );
+    //res.json({ todos });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/tasks/:id', async (req, res) => {
+  const itemId = req.params.id;
+  console.log("get by id",itemId)
+  try {
+    const item = await Todo.findById(itemId);
+    res.json({ item });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a task by ID
+app.put('/tasks/:id', async (req, res) => {
   const taskId = parseInt(req.params.id);
-  const task = tasks.find((t) => t.id === taskId);
+  const task = await Todo.findById(itemId);
 
   if (!task) {
     res.status(404).json({ error: 'Task not found' });
   } else {
-    res.json(task);
+    await task.save();
+    res.status(204).json({ task });
   }
 });
 
-// Add a new task
-app.post('/tasks', (req, res) => {
-  const newTask = { id: tasks.length + 1, text: req.body.text };
-  tasks.push(newTask);
-  res.status(201).json(newTask);
-});
+// Route to delete an item by ID
+app.delete('/tasks/:id', async (req, res) => {
+  const taskId = req.params.id;
 
-// Add a new task
-app.post('/saved-tasks', (req, res) => {
-    const newTask = { id: tasks.length + 1, text: req.body.text };
-    savedTasks.push(newTask);
-    res.status(201).json(newTask);
-});
+  try {
+    const deletedItem = await Todo.findByIdAndDelete(taskId);
 
-// Update a task by ID
-app.put('/tasks/:id', (req, res) => {
-  const taskId = parseInt(req.params.id);
-  const taskIndex = tasks.findIndex((t) => t.id === taskId);
+    if (!deletedItem) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
 
-  if (taskIndex === -1) {
-    res.status(404).json({ error: 'Task not found' });
-  } else {
-    tasks[taskIndex].text = req.body.text;
-    res.json(tasks[taskIndex]);
+    res.json({ message: 'Item deleted successfully', deletedItem });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Delete a task by ID
-app.delete('/tasks/:id', (req, res) => {
-  const taskId = parseInt(req.params.id);
-  tasks = tasks.filter((t) => t.id !== taskId);
-  res.json({ message: 'Task deleted successfully' });
+app.post('/tasks', async (req, res) => {
+  const { text, completed } = req.body;
+  console.log("saved-tasks req",req.body)
+  console.log("saved-tasks req",text)
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    const todo = new Todo({ text, completed });
+    await todo.save();
+    res.status(201).json({ todo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//saved-tasks
+
+app.get('/saved-tasks/:id', async (req, res) => {
+  const itemId = req.params.id;
+  console.log("get by id",itemId)
+  try {
+    const item = await SavedTodo.findById(itemId);
+    res.json({ item });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all tasks
+app.get('/saved-tasks', async (req, res) => {
+  try {
+    const todos = await SavedTodo.find();
+    //console.log("get response",todos)
+    res.json( todos );
+    //res.json({ todos });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/saved-tasks', async (req, res) => {
+  const { text, completed } = req.body.item;
+  console.log("saved-tasks req",req.body)
+  console.log("saved-tasks req",text)
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    const todo = new SavedTodo({ text, completed });
+    await todo.save();
+    res.status(201).json({ todo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
 });
